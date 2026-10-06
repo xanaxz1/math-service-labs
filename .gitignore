@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+.env
+
+# База данных (не коммитим!)
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
