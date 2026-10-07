@@ -5,3 +5,6 @@ pyotp
 bcrypt
 python-multipart
 python-jose[cryptography]
+sympy 
+scipy 
+numpy

@@ -8,6 +8,7 @@ import schemas
 import os
 import pyotp
 import bcrypt
+import math_engine
 
 # --- Функции для безопасного хеширования паролей (чистый bcrypt) ---
 def get_password_hash(password: str) -> str:
@@ -79,4 +80,25 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
 # --- 3. ЗАЩИЩЕННЫЙ ЭНДПОИНТ 
 @app.post("/api/calculate")
 def calculate(req: schemas.CalcRequest):
-    return {"expression": req.expression, "result": f"Вычислено: {req.expression} (функционал в разработке)"}
+    try:
+        if req.operation == 'derivative':
+            res = math_engine.calculate_derivative(req.expression)
+            return {"operation": "Производная", "result": res}
+            
+        elif req.operation == 'integral':
+            if req.param_a is None or req.param_b is None:
+                raise ValueError("Для интеграла нужны пределы a и b")
+            res = math_engine.calculate_integral(req.expression, req.param_a, req.param_b)
+            return {"operation": "Определенный интеграл", "result": res}
+            
+        elif req.operation == 'root':
+            if req.param_x0 is None:
+                raise ValueError("Для поиска корня нужно начальное приближение x0")
+            res = math_engine.find_root(req.expression, req.param_x0)
+            return {"operation": "Поиск корня", "result": res}
+            
+        else:
+            raise ValueError("Неизвестная операция")
+            
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка вычисления: {str(e)}")
