@@ -8,3 +8,5 @@ python-jose[cryptography]
 sympy 
 scipy 
 numpy
+pytest
+httpx
