@@ -2,27 +2,214 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Математический сервис - Прототип</title>
+    <title>Math Service - Авторизация и 2FA</title>
+    <!-- Подключаем библиотеку для генерации QR-кодов -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        button { padding: 10px 20px; cursor: pointer; }
-        #result { margin-top: 20px; font-family: monospace; color: green; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 40px auto; 
+            max-width: 700px;
+        }
+        .section { 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        input { 
+            display: block; 
+            width: 100%; 
+            margin: 10px 0; 
+            padding: 8px; 
+        }
+        button { 
+            padding: 10px 20px; 
+            cursor: pointer; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+        }
+        button:hover { background: #0056b3; }
+        
+        /* Стили для блока с QR-кодом */
+        #qr-container {
+            display: none; /* Скрыт по умолчанию */
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px dashed #007bff;
+            border-radius: 8px;
+            text-align: center;
+        }
+        #qrcode {
+            display: inline-block;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+        .secret-text {
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 13px;
+            word-break: break-all;
+            color: #555;
+        }
+        
+        /* Стили для инструкции */
+        .instruction {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 15px;
+            margin-top: 15px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .instruction ol {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        
+        #reg-result, #login-result, #calc-result {
+            margin-top: 15px; 
+            font-family: monospace; 
+            color: green; 
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            font-size: 12px;
+        }
+        .hidden { display: none; }
+        h1 { margin-bottom: 30px; }
+        h3 { margin-top: 0; }
     </style>
 </head>
 <body>
     <h1>Вычислительный веб-сервис</h1>
-    <p><b>Статус прототипа:</b> Базовые компоненты архитектуры развернуты.</p>
-    
-    <button onclick="testBackend()">Проверить связь с Бэкендом и БД</button>
-    
-    <pre id="result"></pre>
+
+    <!-- Форма регистрации -->
+    <div id="register-section" class="section">
+        <h3>Регистрация</h3>
+        <input type="text" id="reg-username" placeholder="Логин">
+        <input type="password" id="reg-password" placeholder="Пароль">
+        <button onclick="register()">Зарегистрироваться</button>
+        
+        <!-- Блок с QR-кодом (появится после регистрации) -->
+        <div id="qr-container">
+            <h4>📱 Настройте двухфакторную аутентификацию</h4>
+            <div id="qrcode"></div>
+            <div class="secret-text">
+                Секретный ключ: <b id="secret-display"></b>
+            </div>
+            
+            <div class="instruction">
+                <b>Краткая инструкция:</b>
+                <ol>
+                    <li>Откройте приложение <b>Google Authenticator</b> (или Яндекс.Ключ / Microsoft Authenticator) на телефоне.</li>
+                    <li>Нажмите кнопку <b>«+»</b> → выберите <b>«Сканировать QR-код»</b> (или «Ввести ключ вручную» и скопируйте секрет выше).</li>
+                    <li>В приложении появится запись <b>MathService</b> с 6-значным кодом, меняющимся каждые 30 секунд.</li>
+                    <li>Используйте этот код при входе в систему.</li>
+                </ol>
+            </div>
+        </div>
+        
+        <pre id="reg-result"></pre>
+    </div>
+
+    <!-- Форма входа -->
+    <div id="login-section" class="section">
+        <h3>Вход (с 2FA)</h3>
+        <input type="text" id="login-username" placeholder="Логин">
+        <input type="password" id="login-password" placeholder="Пароль">
+        <input type="text" id="login-otp" placeholder="6-значный код из Google Authenticator">
+        <button onclick="login()">Войти</button>
+        <pre id="login-result"></pre>
+    </div>
+
+    <!-- Панель вычислений -->
+    <div id="dashboard-section" class="section hidden">
+        <h3>Панель вычислений</h3>
+        <p>Добро пожаловать! 2FA пройдена успешно.</p>
+        <input type="text" id="calc-expr" placeholder="Введите выражение (напр. x**2)">
+        <button onclick="calculate()">Вычислить</button>
+        <pre id="calc-result"></pre>
+    </div>
 
     <script>
-        // Сетевое взаимодействие с бэкендом
-        async function testBackend() {
-            const response = await fetch('/api/test_db', { method: 'POST' });
-            const data = await response.json();
-            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+        let qrCodeInstance = null; // Храним ссылку на QR для очистки
+
+        async function register() {
+            const username = document.getElementById('reg-username').value;
+            const password = document.getElementById('reg-password').value;
+            
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            
+            const data = await res.json();
+            
+            if (res.ok && data.otp_uri) {
+                // Показываем блок с QR
+                document.getElementById('qr-container').style.display = 'block';
+                document.getElementById('secret-display').innerText = data.otp_secret;
+                
+                // Очищаем старый QR, если был
+                const qrDiv = document.getElementById('qrcode');
+                qrDiv.innerHTML = '';
+                
+                // Генерируем новый QR-код
+                qrCodeInstance = new QRCode(qrDiv, {
+                    text: data.otp_uri,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                
+                document.getElementById('reg-result').innerText = '✅ Регистрация прошла успешно! Отсканируйте QR-код выше.';
+            } else {
+                document.getElementById('reg-result').innerText = 'Ошибка: ' + (data.detail || 'Неизвестная ошибка');
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const otp_code = document.getElementById('login-otp').value;
+            
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password, otp_code})
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('login-result').innerText = data.message;
+                document.getElementById('register-section').classList.add('hidden');
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('dashboard-section').classList.remove('hidden');
+            } else {
+                const err = await res.json();
+                document.getElementById('login-result').innerText = "Ошибка: " + err.detail;
+            }
+        }
+
+        async function calculate() {
+            const expression = document.getElementById('calc-expr').value;
+            const res = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({expression})
+            });
+            const data = await res.json();
+            document.getElementById('calc-result').innerText = JSON.stringify(data, null, 2);
         }
     </script>
 </body>
